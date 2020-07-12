@@ -1,6 +1,7 @@
 package io.jzheaux.springsecurity.resolutions;
 
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import javax.persistence.CascadeType;
 import javax.persistence.Column;
@@ -15,6 +16,7 @@ import java.util.Collections;
 import java.util.UUID;
 
 @Data
+@NoArgsConstructor
 @Entity(name = "users")
 public class User implements Serializable {
 
@@ -33,6 +35,14 @@ public class User implements Serializable {
         this.id = UUID.randomUUID();
         this.username = username;
         this.password = password;
+    }
+
+    public User(User user) {
+        this.id = user.id;
+        this.username = user.username;
+        this.password = user.password;
+        this.enabled = user.enabled;
+        this.userAuthorities = user.userAuthorities;
     }
 
     public Collection<UserAuthority> getUserAuthorities() {

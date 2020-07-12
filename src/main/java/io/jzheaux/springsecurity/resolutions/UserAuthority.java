@@ -1,6 +1,7 @@
 package io.jzheaux.springsecurity.resolutions;
 
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import javax.persistence.Column;
 import javax.persistence.Entity;
@@ -10,6 +11,7 @@ import javax.persistence.ManyToOne;
 import java.util.UUID;
 
 @Data
+@NoArgsConstructor
 @Entity(name = "authorities")
 public class UserAuthority {
 
@@ -20,12 +22,12 @@ public class UserAuthority {
     private String authority;
 
     @ManyToOne
-    @JoinColumn(name="username", referencedColumnName="username")
+    @JoinColumn(name = "username", referencedColumnName = "username")
     private User user;
 
-    public UserAuthority(String authority,User user) {
-        this.id=UUID.randomUUID();
-        this.user=user;
+    public UserAuthority(String authority, User user) {
+        this.id = UUID.randomUUID();
+        this.user = user;
         this.authority = authority;
     }
 
