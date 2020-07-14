@@ -27,7 +27,6 @@ public class ResolutionsApplication extends WebSecurityConfigurerAdapter {
                 .authorizeRequests(authz -> authz
                         .mvcMatchers(HttpMethod.GET, "/resolutions", "/resolution/**").hasAuthority("resolution:read")
                         .anyRequest().hasAuthority("resolution:write"))
-                .httpBasic()
-                .and().csrf().disable();
+                .httpBasic(basic->{});
     }
 }
