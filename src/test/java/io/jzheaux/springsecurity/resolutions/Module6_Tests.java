@@ -4,11 +4,10 @@ import okhttp3.mockwebserver.Dispatcher;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
-import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.Mock;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,7 +20,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.convert.converter.Converter;
-import org.springframework.data.repository.NoRepositoryBean;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
@@ -32,7 +30,6 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.oauth2.core.OAuth2AccessToken;
 import org.springframework.security.oauth2.core.OAuth2AuthenticatedPrincipal;
 import org.springframework.security.oauth2.jwt.BadJwtException;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtDecoders;
 import org.springframework.security.oauth2.server.resource.authentication.BearerTokenAuthentication;
@@ -52,13 +49,11 @@ import java.lang.reflect.Field;
 import java.net.URI;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 import static io.jzheaux.springsecurity.resolutions.ReflectionSupport.annotation;
 import static io.jzheaux.springsecurity.resolutions.ReflectionSupport.getDeclaredFieldByType;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -67,305 +62,306 @@ import static org.junit.jupiter.api.Assertions.fail;
 import static org.springframework.security.oauth2.core.OAuth2AccessToken.TokenType.BEARER;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 
+@Ignore
 @RunWith(SpringRunner.class)
-@AutoConfigureMockMvc(print= MockMvcPrint.NONE)
+@AutoConfigureMockMvc(print = MockMvcPrint.NONE)
 @SpringBootTest
 public class Module6_Tests {
-	@Autowired
-	MockMvc mvc;
+    @Autowired
+    MockMvc mvc;
 
-	@Autowired(required = false)
-	WebClient.Builder web;
+    @Autowired(required = false)
+    WebClient.Builder web;
 
-	@Autowired(required = false)
-	UserDetailsService userDetailsService;
+    @Autowired(required = false)
+    UserDetailsService userDetailsService;
 
-	@Autowired(required = false)
-	UserService userService;
+    @Autowired(required = false)
+    UserService userService;
 
-	@Autowired(required = false)
-	OpaqueTokenIntrospector introspector;
+    @Autowired(required = false)
+    OpaqueTokenIntrospector introspector;
 
-	@Autowired
-	ResolutionController resolutionController;
+    @Autowired
+    ResolutionController resolutionController;
 
-	@Autowired
-	ResolutionRepository resolutions;
+    @Autowired
+    ResolutionRepository resolutions;
 
-	@Autowired
-	MockWebServer userEndpoint;
+    @Autowired
+    MockWebServer userEndpoint;
 
-	@Autowired
-	AuthorizationServer authz;
+    @Autowired
+    AuthorizationServer authz;
 
-	@TestConfiguration
-	static class TestConfig implements DisposableBean, InitializingBean {
-		AuthorizationServer server = new AuthorizationServer();
+    @Before
+    public void setup() throws Exception {
+        assertNotNull(
+                "Module 1: Could not find an instance of `UserDetailsService` in the application " +
+                        "context. Make sure that you've already completed earlier modules before starting " +
+                        "this one.",
+                this.userDetailsService);
+    }
 
-		@Override
-		public void afterPropertiesSet() throws Exception {
-			this.server.start();
-		}
+    @Test
+    public void task_1() throws Exception {
+        // @Cross Origin without credentials
+        CrossOrigin crossOrigin = annotation(CrossOrigin.class, "read");
+        assertNotNull(
+                "Task 1: Make sure that there is a `@CrossOrigin` annotation on `ResolutionController#read`",
+                crossOrigin);
+        assertNotEquals(
+                "Task 1: Since you are using Bearer Token authentication now, `allowCredentials` should be removed",
+                "true", crossOrigin.allowCredentials());
 
-		@Override
-		public void destroy() throws Exception {
-			this.server.stop();
-		}
+        MvcResult result = this.mvc.perform(options("/resolutions")
+                .header("Access-Control-Request-Method", "GET")
+                .header("Access-Control-Allow-Credentials", "true")
+                .header("Origin", "http://localhost:4000"))
+                .andReturn();
 
-		@ConditionalOnProperty("spring.security.oauth2.resourceserver.jwt.issuer-uri")
-		@Bean
-		JwtDecoder jwtDecoder(OAuth2ResourceServerProperties properties) {
-			return JwtDecoders.fromOidcIssuerLocation(this.server.issuer());
-		}
+        assertNull(
+                "Task 1: Did an `OPTIONS` pre-flight request from `http://localhost:4000` for `GET /resolutions`, and it is allowing credentials;" +
+                        "this should be shut off now that you are using Bearer Token authentication",
+                result.getResponse().getHeader("Access-Control-Allow-Credentials"));
 
-		@ConditionalOnProperty("spring.security.oauth2.resourceserver.opaquetoken.introspection-uri")
-		@Bean
-		JwtDecoder interrim() {
-			return token -> {
-				throw new BadJwtException("bad jwt");
-			};
-		}
+        result = this.mvc.perform(options("/" + UUID.randomUUID())
+                .header("Access-Control-Request-Method", "HEAD")
+                .header("Access-Control-Allow-Credentials", "true")
+                .header("Origin", "http://localhost:4000"))
+                .andReturn();
 
-		@ConditionalOnProperty("spring.security.oauth2.resourceserver.opaquetoken.introspection-uri")
-		@ConditionalOnMissingBean
-		@Bean
-		OpaqueTokenIntrospector introspector(OAuth2ResourceServerProperties properties) {
-			return new NimbusOpaqueTokenIntrospector(
-					this.server.introspectionUri(),
-					properties.getOpaquetoken().getClientId(),
-					properties.getOpaquetoken().getClientSecret());
-		}
+        assertNull(
+                "Task 1: Did an `OPTIONS` pre-flight request from `http://localhost:4000` for a random endpoint, and it is allowing credentials;" +
+                        "this should be shut off now that you are using Bearer Token authentication",
+                result.getResponse().getHeader("Access-Control-Allow-Credentials"));
+    }
 
-		@Bean
-		AuthorizationServer authz() {
-			return this.server;
-		}
-	}
+    @Test
+    public void task_2() throws Exception {
+        task_1();
+        // add UserService
 
-	@TestConfiguration
-	static class OpaqueTokenPostProcessor {
-		@Autowired
-		AuthorizationServer authz;
+        assertNotNull(
+                "Task 2: Make sure to publish a `@Bean` of type `WebClient.Builder`",
+                this.web);
 
-		@Autowired(required=false)
-		void introspector(OpaqueTokenIntrospector introspector) throws Exception {
-			NimbusOpaqueTokenIntrospector nimbus = null;
-			if (introspector instanceof NimbusOpaqueTokenIntrospector) {
-				nimbus = (NimbusOpaqueTokenIntrospector) introspector;
-			} else if (introspector instanceof UserRepositoryOpaqueTokenIntrospector) {
-				Field delegate =
-						getDeclaredFieldByType(UserRepositoryOpaqueTokenIntrospector.class, OpaqueTokenIntrospector.class);
-				if (delegate == null) {
-					delegate = getDeclaredFieldByType(UserRepositoryOpaqueTokenIntrospector.class, NimbusOpaqueTokenIntrospector.class);
-				}
-				if (delegate != null) {
-					delegate.setAccessible(true);
-					nimbus = (NimbusOpaqueTokenIntrospector) delegate.get(introspector);
-				}
-			}
+        assertNotNull(
+                "Task 2: Make sure to publish your `UserService`",
+                this.userService);
 
-			if (nimbus != null) {
-				nimbus.setRequestEntityConverter(
-						defaultRequestEntityConverter(URI.create(this.authz.introspectionUri())));
-			}
-		}
+        assertEquals(
+                "Task 2: The `WebClient` should be set to have a `baseUrl` of `http://localhost:8081`",
+                "http://localhost:8081", WebClientPostProcessor.userBaseUrl);
 
-		private Converter<String, RequestEntity<?>> defaultRequestEntityConverter(URI introspectionUri) {
-			return token -> {
-				HttpHeaders headers = requestHeaders();
-				MultiValueMap<String, String> body = requestBody(token);
-				return new RequestEntity<>(body, headers, HttpMethod.POST, introspectionUri);
-			};
-		}
+        String name = this.userService.getFullName("user")
+                .orElseGet(() -> fail("Task 2: `UserService#getFullName` returned no results for username `user`. " +
+                        "Make sure that you are calling the `/user/{username}/fullName` endpoint in the implementation"));
+        assertEquals(
+                "Task 2: `UserService#getFullName` returned an unexpected result for username `user`. " +
+                        "Make sure that you are calling the `/user/{username}/fullName` endpoint in the implementation",
+                "User Userson", name);
 
-		private HttpHeaders requestHeaders() {
-			HttpHeaders headers = new HttpHeaders();
-			headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
-			return headers;
-		}
+        assertTrue(
+                "Task 2: It doesn't appear that the `WebClient` is getting called. Make sure that you are " +
+                        "invoking the `WebClient` to address the `/user/{username}/fullName` endpoint.",
+                this.userEndpoint.getRequestCount() > 0);
+    }
 
-		private MultiValueMap<String, String> requestBody(String token) {
-			MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
-			body.add("token", token);
-			return body;
-		}
-	}
+    @Test
+    public void task_3() throws Exception {
+        task_2();
 
-	@TestConfiguration
-	static class WebClientPostProcessor implements DisposableBean {
-		static String userBaseUrl;
+        // publish web client
+        assertNotNull(
+                "Task 3: Make sure you are adding an instance of `ServletBearerExchangeFilterFunction` to your " +
+                        "`WebClient.Builder` definition",
+                getFilter(ServletBearerExchangeFilterFunction.class));
+    }
 
-		MockWebServer userEndpoint = new MockWebServer();
+    private <T extends ExchangeFilterFunction> T getFilter(Class<T> clazz) throws Exception {
+        Field filtersField = this.web.getClass().getDeclaredField("filters");
+        filtersField.setAccessible(true);
+        List<ExchangeFilterFunction> filters = (List<ExchangeFilterFunction>)
+                filtersField.get(this.web);
+        if (filters == null) {
+            return null;
+        }
+        for (ExchangeFilterFunction filter : filters) {
+            if (filter instanceof ServletBearerExchangeFilterFunction) {
+                return (T) filter;
+            }
+        }
+        return null;
+    }
 
-		@Override
-		public void destroy() throws Exception {
-			this.userEndpoint.shutdown();
-		}
+    @Test
+    public void task_4() throws Exception {
+        task_3();
+        // update resolution controller
 
-		@Autowired(required = false)
-		void postProcess(WebClient.Builder web) throws Exception {
-			Field field = web.getClass().getDeclaredField("baseUrl");
-			field.setAccessible(true);
-			userBaseUrl = (String) field.get(web);
-			web.baseUrl(this.userEndpoint.url("").toString());
-		}
+        int count = this.userEndpoint.getRequestCount();
+        this.resolutions.save(new Resolution("my last resolution", "user"));
+        String token = this.authz.token("user", "resolution:read user:read");
+        Authentication authentication = getAuthentication(token);
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        try {
+            Iterable<Resolution> resolutions = this.resolutionController.read();
+            assertTrue(
+                    "Task 4: It appears that `ResolutionController` is not calling `UserService`. " +
+                            "Make sure to switch `UserRepository` with `UserService`",
+                    this.userEndpoint.getRequestCount() > count);
+            for (Resolution resolution : resolutions) {
+                assertTrue(
+                        "Task 4: The `/resolutions` endpoint didn't append the user's personal name in the reslution text.",
+                        resolution.getText().endsWith("User Userson"));
+            }
+        } finally {
+            SecurityContextHolder.clearContext();
+            this.authz.revoke(token);
+        }
+    }
 
-		@Bean
-		MockWebServer userEndpoint() {
-			this.userEndpoint.setDispatcher(new Dispatcher() {
-				@Override
-				public MockResponse dispatch(RecordedRequest recordedRequest) {
-					MockResponse response = new MockResponse().setResponseCode(200);
-					String path = recordedRequest.getPath();
-					switch(path) {
-						case "/user/user/fullName":
-							return response.setBody("User Userson");
-						case "/user/hasread/fullName":
-							return response.setBody("Has Read");
-						case "/user/haswrite/fullName":
-							return response.setBody("Has Write");
-						case "/user/admin/fullName":
-							return response.setBody("Admin Adminson");
-						default:
-							return response.setResponseCode(404);
-					}
-				}
-			});
-			return this.userEndpoint;
-		}
-	}
+    private Authentication getAuthentication(String token) {
+        OAuth2AuthenticatedPrincipal principal = this.introspector.introspect(token);
+        OAuth2AccessToken credentials = new OAuth2AccessToken(BEARER, token, null, null);
+        return new BearerTokenAuthentication(principal, credentials, principal.getAuthorities());
+    }
 
-	@Before
-	public void setup() throws Exception {
-		assertNotNull(
-				"Module 1: Could not find an instance of `UserDetailsService` in the application " +
-						"context. Make sure that you've already completed earlier modules before starting " +
-						"this one.",
-				this.userDetailsService);
-	}
+    @TestConfiguration
+    static class TestConfig implements DisposableBean, InitializingBean {
+        AuthorizationServer server = new AuthorizationServer();
 
-	@Test
-	public void task_1() throws Exception {
-		// @Cross Origin without credentials
-		CrossOrigin crossOrigin = annotation(CrossOrigin.class, "read");
-		assertNotNull(
-				"Task 1: Make sure that there is a `@CrossOrigin` annotation on `ResolutionController#read`",
-				crossOrigin);
-		assertNotEquals(
-				"Task 1: Since you are using Bearer Token authentication now, `allowCredentials` should be removed",
-				"true", crossOrigin.allowCredentials());
+        @Override
+        public void afterPropertiesSet() throws Exception {
+            this.server.start();
+        }
 
-		MvcResult result = this.mvc.perform(options("/resolutions")
-				.header("Access-Control-Request-Method", "GET")
-				.header("Access-Control-Allow-Credentials", "true")
-				.header("Origin", "http://localhost:4000"))
-				.andReturn();
+        @Override
+        public void destroy() throws Exception {
+            this.server.stop();
+        }
 
-		assertNull(
-				"Task 1: Did an `OPTIONS` pre-flight request from `http://localhost:4000` for `GET /resolutions`, and it is allowing credentials;" +
-						"this should be shut off now that you are using Bearer Token authentication",
-				result.getResponse().getHeader("Access-Control-Allow-Credentials"));
+        @ConditionalOnProperty("spring.security.oauth2.resourceserver.jwt.issuer-uri")
+        @Bean
+        JwtDecoder jwtDecoder(OAuth2ResourceServerProperties properties) {
+            return JwtDecoders.fromOidcIssuerLocation(this.server.issuer());
+        }
 
-		result = this.mvc.perform(options("/" + UUID.randomUUID())
-				.header("Access-Control-Request-Method", "HEAD")
-				.header("Access-Control-Allow-Credentials", "true")
-				.header("Origin", "http://localhost:4000"))
-				.andReturn();
+        @ConditionalOnProperty("spring.security.oauth2.resourceserver.opaquetoken.introspection-uri")
+        @Bean
+        JwtDecoder interrim() {
+            return token -> {
+                throw new BadJwtException("bad jwt");
+            };
+        }
 
-		assertNull(
-				"Task 1: Did an `OPTIONS` pre-flight request from `http://localhost:4000` for a random endpoint, and it is allowing credentials;" +
-						"this should be shut off now that you are using Bearer Token authentication",
-				result.getResponse().getHeader("Access-Control-Allow-Credentials"));
-	}
+        @ConditionalOnProperty("spring.security.oauth2.resourceserver.opaquetoken.introspection-uri")
+        @ConditionalOnMissingBean
+        @Bean
+        OpaqueTokenIntrospector introspector(OAuth2ResourceServerProperties properties) {
+            return new NimbusOpaqueTokenIntrospector(
+                    this.server.introspectionUri(),
+                    properties.getOpaquetoken().getClientId(),
+                    properties.getOpaquetoken().getClientSecret());
+        }
 
-	@Test
-	public void task_2() throws Exception {
-		task_1();
-		// add UserService
+        @Bean
+        AuthorizationServer authz() {
+            return this.server;
+        }
+    }
 
-		assertNotNull(
-				"Task 2: Make sure to publish a `@Bean` of type `WebClient.Builder`",
-				this.web);
+    @TestConfiguration
+    static class OpaqueTokenPostProcessor {
+        @Autowired
+        AuthorizationServer authz;
 
-		assertNotNull(
-				"Task 2: Make sure to publish your `UserService`",
-				this.userService);
+        @Autowired(required = false)
+        void introspector(OpaqueTokenIntrospector introspector) throws Exception {
+            NimbusOpaqueTokenIntrospector nimbus = null;
+            if (introspector instanceof NimbusOpaqueTokenIntrospector) {
+                nimbus = (NimbusOpaqueTokenIntrospector) introspector;
+            } else if (introspector instanceof UserRepositoryOpaqueTokenIntrospector) {
+                Field delegate =
+                        getDeclaredFieldByType(UserRepositoryOpaqueTokenIntrospector.class, OpaqueTokenIntrospector.class);
+                if (delegate == null) {
+                    delegate = getDeclaredFieldByType(UserRepositoryOpaqueTokenIntrospector.class, NimbusOpaqueTokenIntrospector.class);
+                }
+                if (delegate != null) {
+                    delegate.setAccessible(true);
+                    nimbus = (NimbusOpaqueTokenIntrospector) delegate.get(introspector);
+                }
+            }
 
-		assertEquals(
-				"Task 2: The `WebClient` should be set to have a `baseUrl` of `http://localhost:8081`",
-				"http://localhost:8081", WebClientPostProcessor.userBaseUrl);
+            if (nimbus != null) {
+                nimbus.setRequestEntityConverter(
+                        defaultRequestEntityConverter(URI.create(this.authz.introspectionUri())));
+            }
+        }
 
-		String name = this.userService.getFullName("user")
-				.orElseGet(() -> fail("Task 2: `UserService#getFullName` returned no results for username `user`. " +
-						"Make sure that you are calling the `/user/{username}/fullName` endpoint in the implementation"));
-		assertEquals(
-				"Task 2: `UserService#getFullName` returned an unexpected result for username `user`. " +
-						"Make sure that you are calling the `/user/{username}/fullName` endpoint in the implementation",
-				"User Userson", name);
+        private Converter<String, RequestEntity<?>> defaultRequestEntityConverter(URI introspectionUri) {
+            return token -> {
+                HttpHeaders headers = requestHeaders();
+                MultiValueMap<String, String> body = requestBody(token);
+                return new RequestEntity<>(body, headers, HttpMethod.POST, introspectionUri);
+            };
+        }
 
-		assertTrue(
-				"Task 2: It doesn't appear that the `WebClient` is getting called. Make sure that you are " +
-						"invoking the `WebClient` to address the `/user/{username}/fullName` endpoint.",
-				this.userEndpoint.getRequestCount() > 0);
-	}
+        private HttpHeaders requestHeaders() {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
+            return headers;
+        }
 
-	@Test
-	public void task_3() throws Exception {
-		task_2();
+        private MultiValueMap<String, String> requestBody(String token) {
+            MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+            body.add("token", token);
+            return body;
+        }
+    }
 
-		// publish web client
-		assertNotNull(
-				"Task 3: Make sure you are adding an instance of `ServletBearerExchangeFilterFunction` to your " +
-						"`WebClient.Builder` definition",
-				getFilter(ServletBearerExchangeFilterFunction.class));
-	}
+    @TestConfiguration
+    static class WebClientPostProcessor implements DisposableBean {
+        static String userBaseUrl;
 
-	private <T extends ExchangeFilterFunction> T getFilter(Class<T> clazz) throws Exception {
-		Field filtersField = this.web.getClass().getDeclaredField("filters");
-		filtersField.setAccessible(true);
-		List<ExchangeFilterFunction> filters = (List<ExchangeFilterFunction>)
-				filtersField.get(this.web);
-		if (filters == null) {
-			return null;
-		}
-		for (ExchangeFilterFunction filter : filters) {
-			if (filter instanceof ServletBearerExchangeFilterFunction) {
-				return (T) filter;
-			}
-		}
-		return null;
-	}
+        MockWebServer userEndpoint = new MockWebServer();
 
-	@Test
-	public void task_4() throws Exception {
-		task_3();
-		// update resolution controller
+        @Override
+        public void destroy() throws Exception {
+            this.userEndpoint.shutdown();
+        }
 
-		int count = this.userEndpoint.getRequestCount();
-		this.resolutions.save(new Resolution("my last resolution", "user"));
-		String token = this.authz.token("user", "resolution:read user:read");
-		Authentication authentication = getAuthentication(token);
-		SecurityContextHolder.getContext().setAuthentication(authentication);
-		try {
-			Iterable<Resolution> resolutions = this.resolutionController.read();
-			assertTrue(
-					"Task 4: It appears that `ResolutionController` is not calling `UserService`. " +
-							"Make sure to switch `UserRepository` with `UserService`",
-					this.userEndpoint.getRequestCount() > count);
-			for (Resolution resolution : resolutions) {
-				assertTrue(
-						"Task 4: The `/resolutions` endpoint didn't append the user's personal name in the reslution text.",
-						resolution.getText().endsWith("User Userson"));
-			}
-		} finally {
-			SecurityContextHolder.clearContext();
-			this.authz.revoke(token);
-		}
-	}
+        @Autowired(required = false)
+        void postProcess(WebClient.Builder web) throws Exception {
+            Field field = web.getClass().getDeclaredField("baseUrl");
+            field.setAccessible(true);
+            userBaseUrl = (String) field.get(web);
+            web.baseUrl(this.userEndpoint.url("").toString());
+        }
 
-	private Authentication getAuthentication(String token) {
-		OAuth2AuthenticatedPrincipal principal = this.introspector.introspect(token);
-		OAuth2AccessToken credentials = new OAuth2AccessToken(BEARER, token, null, null);
-		return new BearerTokenAuthentication(principal, credentials, principal.getAuthorities());
-	}
+        @Bean
+        MockWebServer userEndpoint() {
+            this.userEndpoint.setDispatcher(new Dispatcher() {
+                @Override
+                public MockResponse dispatch(RecordedRequest recordedRequest) {
+                    MockResponse response = new MockResponse().setResponseCode(200);
+                    String path = recordedRequest.getPath();
+                    switch (path) {
+                        case "/user/user/fullName":
+                            return response.setBody("User Userson");
+                        case "/user/hasread/fullName":
+                            return response.setBody("Has Read");
+                        case "/user/haswrite/fullName":
+                            return response.setBody("Has Write");
+                        case "/user/admin/fullName":
+                            return response.setBody("Admin Adminson");
+                        default:
+                            return response.setResponseCode(404);
+                    }
+                }
+            });
+            return this.userEndpoint;
+        }
+    }
 }

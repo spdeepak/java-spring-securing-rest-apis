@@ -1,10 +1,9 @@
 package io.jzheaux.springsecurity.resolutions;
 
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.springframework.beans.factory.DisposableBean;
-import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -15,11 +14,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.security.config.annotation.authentication.configuration.EnableGlobalAuthentication;
 import org.springframework.security.oauth2.jwt.BadJwtException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtDecoders;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.introspection.NimbusOpaqueTokenIntrospector;
 import org.springframework.security.oauth2.server.resource.introspection.OpaqueTokenIntrospector;
@@ -31,11 +28,8 @@ import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
-import org.springframework.web.servlet.HandlerMapping;
-import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import javax.servlet.Filter;
-
 import java.util.List;
 import java.util.UUID;
 
@@ -43,12 +37,11 @@ import static io.jzheaux.springsecurity.resolutions.ReflectionSupport.annotation
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+@Ignore
 @RunWith(SpringRunner.class)
-@AutoConfigureMockMvc(print= MockMvcPrint.NONE)
+@AutoConfigureMockMvc(print = MockMvcPrint.NONE)
 @SpringBootTest
 public class Module3_Tests {
     @Autowired
@@ -74,37 +67,6 @@ public class Module3_Tests {
                 this.springSecurityFilterChain);
     }
 
-    @TestConfiguration
-    static class TestConfig {
-
-        @ConditionalOnProperty("spring.security.oauth2.resourceserver.jwt.issuer-uri")
-        @Bean
-        JwtDecoder jwtDecoder() {
-            return NimbusJwtDecoder
-                    .withJwkSetUri("https://idp.example.org/jwks")
-                    .build();
-        }
-
-        @ConditionalOnProperty("spring.security.oauth2.resourceserver.opaquetoken.introspection-uri")
-        @Bean
-        JwtDecoder interrim() {
-            return token -> {
-                throw new BadJwtException("bad jwt");
-            };
-        }
-
-        @ConditionalOnProperty("spring.security.oauth2.resourceserver.opaquetoken.introspection-uri")
-        @ConditionalOnMissingBean
-        @Bean
-        OpaqueTokenIntrospector introspector(OAuth2ResourceServerProperties properties) {
-            return new NimbusOpaqueTokenIntrospector(
-                    properties.getOpaquetoken().getIntrospectionUri(),
-                    properties.getOpaquetoken().getClientId(),
-                    properties.getOpaquetoken().getClientSecret());
-        }
-
-    }
-
     @Test
     public void task_1() {
         // add @CrossOrigin
@@ -123,7 +85,7 @@ public class Module3_Tests {
         CorsFilter filter = getFilter(CorsFilter.class);
         assertNotNull(
                 "Task 2: It doesn't appear that `cors()` is being called on the `HttpSecurity` object. If it is, make " +
-                "sure that `ResolutionsApplication` is extending `WebSecurityConfigurerAdapter` and is overriding `configure(HttpSecurity http)`",
+                        "sure that `ResolutionsApplication` is extending `WebSecurityConfigurerAdapter` and is overriding `configure(HttpSecurity http)`",
                 filter);
     }
 
@@ -158,9 +120,9 @@ public class Module3_Tests {
                 "http://localhost:4000", configuration.getAllowedOrigins().get(0));
 
         MvcResult result = this.mvc.perform(options("/resolutions")
-            .header("Access-Control-Request-Method", "GET")
-            .header("Origin", "http://localhost:4000"))
-            .andReturn();
+                .header("Access-Control-Request-Method", "GET")
+                .header("Origin", "http://localhost:4000"))
+                .andReturn();
 
         assertEquals(
                 "Task 3: Tried to do an `OPTIONS` pre-flight request from `http://localhost:4000` for `GET /resolutions` failed.",
@@ -232,5 +194,36 @@ public class Module3_Tests {
         }
 
         return null;
+    }
+
+    @TestConfiguration
+    static class TestConfig {
+
+        @ConditionalOnProperty("spring.security.oauth2.resourceserver.jwt.issuer-uri")
+        @Bean
+        JwtDecoder jwtDecoder() {
+            return NimbusJwtDecoder
+                    .withJwkSetUri("https://idp.example.org/jwks")
+                    .build();
+        }
+
+        @ConditionalOnProperty("spring.security.oauth2.resourceserver.opaquetoken.introspection-uri")
+        @Bean
+        JwtDecoder interrim() {
+            return token -> {
+                throw new BadJwtException("bad jwt");
+            };
+        }
+
+        @ConditionalOnProperty("spring.security.oauth2.resourceserver.opaquetoken.introspection-uri")
+        @ConditionalOnMissingBean
+        @Bean
+        OpaqueTokenIntrospector introspector(OAuth2ResourceServerProperties properties) {
+            return new NimbusOpaqueTokenIntrospector(
+                    properties.getOpaquetoken().getIntrospectionUri(),
+                    properties.getOpaquetoken().getClientId(),
+                    properties.getOpaquetoken().getClientSecret());
+        }
+
     }
 }
