@@ -21,15 +21,15 @@ import java.util.UUID;
 public class User implements Serializable {
 
     @Id
-    UUID id;
+    private UUID id;
+    @Column(name = "username", unique = true)
+    private String username;
     @Column
-    String username;
+    private String password;
     @Column
-    String password;
-    @Column
-    boolean enabled = true;
+    private boolean enabled = true;
     @OneToMany(fetch = FetchType.EAGER, cascade = CascadeType.ALL)
-    Collection<UserAuthority> userAuthorities = new ArrayList<>();
+    private Collection<UserAuthority> userAuthorities = new ArrayList<>();
 
     public User(String username, String password) {
         this.id = UUID.randomUUID();

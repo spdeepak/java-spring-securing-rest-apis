@@ -30,7 +30,7 @@ public class UserRepositoryUserDetailsService implements UserDetailsService {
 
         @Override
         public Collection<? extends GrantedAuthority> getAuthorities() {
-            return this.userAuthorities.stream()
+            return this.getUserAuthorities().stream()
                     .map(UserAuthority::getAuthority)
                     .map(SimpleGrantedAuthority::new)
                     .collect(Collectors.toSet());
@@ -38,17 +38,17 @@ public class UserRepositoryUserDetailsService implements UserDetailsService {
 
         @Override
         public boolean isAccountNonExpired() {
-            return this.enabled;
+            return this.isEnabled();
         }
 
         @Override
         public boolean isAccountNonLocked() {
-            return this.enabled;
+            return this.isEnabled();
         }
 
         @Override
         public boolean isCredentialsNonExpired() {
-            return this.enabled;
+            return this.isEnabled();
         }
     }
 }
