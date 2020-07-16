@@ -5,7 +5,6 @@ import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.DisposableBean;
@@ -66,9 +65,8 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
-@Ignore
 @RunWith(SpringRunner.class)
-@AutoConfigureMockMvc(print = MockMvcPrint.NONE)
+@AutoConfigureMockMvc(print= MockMvcPrint.NONE)
 @SpringBootTest
 public class Module5_Tests {
 
@@ -102,12 +100,149 @@ public class Module5_Tests {
                         "before starting this one", this.userDetailsService);
     }
 
+    @TestConfiguration
+    static class WebClientPostProcessor implements DisposableBean {
+        static String userBaseUrl;
+
+        MockWebServer userEndpoint = new MockWebServer();
+
+        @Override
+        public void destroy() throws Exception {
+            this.userEndpoint.shutdown();
+        }
+
+        @Autowired(required = false)
+        void postProcess(WebClient.Builder web) throws Exception {
+            Field field = web.getClass().getDeclaredField("baseUrl");
+            field.setAccessible(true);
+            userBaseUrl = (String) field.get(web);
+            web.baseUrl(this.userEndpoint.url("").toString());
+        }
+
+        @Bean
+        MockWebServer userEndpoint() {
+            this.userEndpoint.setDispatcher(new Dispatcher() {
+                @Override
+                public MockResponse dispatch(RecordedRequest recordedRequest) {
+                    MockResponse response = new MockResponse().setResponseCode(200);
+                    String path = recordedRequest.getPath();
+                    switch(path) {
+                        case "/user/user/fullName":
+                            return response.setBody("User Userson");
+                        case "/user/hasread/fullName":
+                            return response.setBody("Has Read");
+                        case "/user/haswrite/fullName":
+                            return response.setBody("Has Write");
+                        case "/user/admin/fullName":
+                            return response.setBody("Admin Adminson");
+                        default:
+                            return response.setResponseCode(404);
+                    }
+                }
+            });
+            return this.userEndpoint;
+        }
+    }
+
+    @TestConfiguration
+    static class TestConfig implements DisposableBean, InitializingBean {
+        AuthorizationServer server = new AuthorizationServer();
+
+        @Override
+        public void afterPropertiesSet() throws Exception {
+            this.server.start();
+        }
+
+        @Override
+        public void destroy() throws Exception {
+            this.server.stop();
+        }
+
+        @ConditionalOnProperty("spring.security.oauth2.resourceserver.jwt.issuer-uri")
+        @Bean
+        JwtDecoder jwtDecoder(OAuth2ResourceServerProperties properties) {
+            return JwtDecoders.fromOidcIssuerLocation(this.server.issuer());
+        }
+
+        @ConditionalOnProperty("spring.security.oauth2.resourceserver.opaquetoken.introspection-uri")
+        @Bean
+        JwtDecoder interrim() {
+            return token -> {
+                throw new BadJwtException("bad jwt");
+            };
+        }
+
+        @ConditionalOnProperty("spring.security.oauth2.resourceserver.opaquetoken.introspection-uri")
+        @ConditionalOnMissingBean
+        @Bean
+        OpaqueTokenIntrospector introspector(OAuth2ResourceServerProperties properties) {
+            return new NimbusOpaqueTokenIntrospector(
+                    this.server.introspectionUri(),
+                    properties.getOpaquetoken().getClientId(),
+                    properties.getOpaquetoken().getClientSecret());
+        }
+
+        @Bean
+        AuthorizationServer authz() {
+            return this.server;
+        }
+    }
+
+    @TestConfiguration
+    static class OpaqueTokenPostProcessor {
+        @Autowired
+        AuthorizationServer authz;
+
+        @Autowired(required=false)
+        void introspector(OpaqueTokenIntrospector introspector) throws Exception {
+            NimbusOpaqueTokenIntrospector nimbus = null;
+            if (introspector instanceof NimbusOpaqueTokenIntrospector) {
+                nimbus = (NimbusOpaqueTokenIntrospector) introspector;
+            } else if (introspector instanceof UserRepositoryOpaqueTokenIntrospector) {
+                Field delegate =
+                        getDeclaredFieldByType(UserRepositoryOpaqueTokenIntrospector.class, OpaqueTokenIntrospector.class);
+                if (delegate == null) {
+                    delegate = getDeclaredFieldByType(UserRepositoryOpaqueTokenIntrospector.class, NimbusOpaqueTokenIntrospector.class);
+                }
+                if (delegate != null) {
+                    delegate.setAccessible(true);
+                    nimbus = (NimbusOpaqueTokenIntrospector) delegate.get(introspector);
+                }
+            }
+
+            if (nimbus != null) {
+                nimbus.setRequestEntityConverter(
+                        defaultRequestEntityConverter(URI.create(this.authz.introspectionUri())));
+            }
+        }
+
+        private Converter<String, RequestEntity<?>> defaultRequestEntityConverter(URI introspectionUri) {
+            return token -> {
+                HttpHeaders headers = requestHeaders();
+                MultiValueMap<String, String> body = requestBody(token);
+                return new RequestEntity<>(body, headers, HttpMethod.POST, introspectionUri);
+            };
+        }
+
+        private HttpHeaders requestHeaders() {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON_UTF8));
+            return headers;
+        }
+
+        private MultiValueMap<String, String> requestBody(String token) {
+            MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+            body.add("token", token);
+            return body;
+        }
+    }
+
     @Test
     public void task_1() {
         // add application.yml configuration
         assertNotNull(
                 "Task 1: Could not find an `OpaqueTokenIntrospector` bean in the application context." +
-                        "Make sure that you are specifying the correct property in `application.yml`",
+                "Make sure that you are specifying the correct property in `application.yml`",
                 this.introspector);
 
         String introspectionUrl = "http://localhost:9999/auth/realms/one/protocol/openid-connect/token/introspect";
@@ -253,8 +388,8 @@ public class Module5_Tests {
             Iterable<Resolution> resolutions = this.resolutionController.read();
             for (Resolution hasReadResolutions : resolutions) {
                 assertNotEquals(
-                        "Task 5: A user with the `resolution:share` authority was able to share a resolution that wasn't theirs.",
-                        "user's latest resolution", hasReadResolutions.getText());
+                    "Task 5: A user with the `resolution:share` authority was able to share a resolution that wasn't theirs.",
+                    "user's latest resolution", hasReadResolutions.getText());
             }
         } finally {
             SecurityContextHolder.clearContext();
@@ -311,143 +446,6 @@ public class Module5_Tests {
                     200, result.getResponse().getStatus());
         } finally {
             this.authz.revoke(token);
-        }
-    }
-
-    @TestConfiguration
-    static class WebClientPostProcessor implements DisposableBean {
-        static String userBaseUrl;
-
-        MockWebServer userEndpoint = new MockWebServer();
-
-        @Override
-        public void destroy() throws Exception {
-            this.userEndpoint.shutdown();
-        }
-
-        @Autowired(required = false)
-        void postProcess(WebClient.Builder web) throws Exception {
-            Field field = web.getClass().getDeclaredField("baseUrl");
-            field.setAccessible(true);
-            userBaseUrl = (String) field.get(web);
-            web.baseUrl(this.userEndpoint.url("").toString());
-        }
-
-        @Bean
-        MockWebServer userEndpoint() {
-            this.userEndpoint.setDispatcher(new Dispatcher() {
-                @Override
-                public MockResponse dispatch(RecordedRequest recordedRequest) {
-                    MockResponse response = new MockResponse().setResponseCode(200);
-                    String path = recordedRequest.getPath();
-                    switch (path) {
-                        case "/user/user/fullName":
-                            return response.setBody("User Userson");
-                        case "/user/hasread/fullName":
-                            return response.setBody("Has Read");
-                        case "/user/haswrite/fullName":
-                            return response.setBody("Has Write");
-                        case "/user/admin/fullName":
-                            return response.setBody("Admin Adminson");
-                        default:
-                            return response.setResponseCode(404);
-                    }
-                }
-            });
-            return this.userEndpoint;
-        }
-    }
-
-    @TestConfiguration
-    static class TestConfig implements DisposableBean, InitializingBean {
-        AuthorizationServer server = new AuthorizationServer();
-
-        @Override
-        public void afterPropertiesSet() throws Exception {
-            this.server.start();
-        }
-
-        @Override
-        public void destroy() throws Exception {
-            this.server.stop();
-        }
-
-        @ConditionalOnProperty("spring.security.oauth2.resourceserver.jwt.issuer-uri")
-        @Bean
-        JwtDecoder jwtDecoder(OAuth2ResourceServerProperties properties) {
-            return JwtDecoders.fromOidcIssuerLocation(this.server.issuer());
-        }
-
-        @ConditionalOnProperty("spring.security.oauth2.resourceserver.opaquetoken.introspection-uri")
-        @Bean
-        JwtDecoder interrim() {
-            return token -> {
-                throw new BadJwtException("bad jwt");
-            };
-        }
-
-        @ConditionalOnProperty("spring.security.oauth2.resourceserver.opaquetoken.introspection-uri")
-        @ConditionalOnMissingBean
-        @Bean
-        OpaqueTokenIntrospector introspector(OAuth2ResourceServerProperties properties) {
-            return new NimbusOpaqueTokenIntrospector(
-                    this.server.introspectionUri(),
-                    properties.getOpaquetoken().getClientId(),
-                    properties.getOpaquetoken().getClientSecret());
-        }
-
-        @Bean
-        AuthorizationServer authz() {
-            return this.server;
-        }
-    }
-
-    @TestConfiguration
-    static class OpaqueTokenPostProcessor {
-        @Autowired
-        AuthorizationServer authz;
-
-        @Autowired(required = false)
-        void introspector(OpaqueTokenIntrospector introspector) throws Exception {
-            NimbusOpaqueTokenIntrospector nimbus = null;
-            if (introspector instanceof NimbusOpaqueTokenIntrospector) {
-                nimbus = (NimbusOpaqueTokenIntrospector) introspector;
-            } else if (introspector instanceof UserRepositoryOpaqueTokenIntrospector) {
-                Field delegate =
-                        getDeclaredFieldByType(UserRepositoryOpaqueTokenIntrospector.class, OpaqueTokenIntrospector.class);
-                if (delegate == null) {
-                    delegate = getDeclaredFieldByType(UserRepositoryOpaqueTokenIntrospector.class, NimbusOpaqueTokenIntrospector.class);
-                }
-                if (delegate != null) {
-                    delegate.setAccessible(true);
-                    nimbus = (NimbusOpaqueTokenIntrospector) delegate.get(introspector);
-                }
-            }
-
-            if (nimbus != null) {
-                nimbus.setRequestEntityConverter(
-                        defaultRequestEntityConverter(URI.create(this.authz.introspectionUri())));
-            }
-        }
-
-        private Converter<String, RequestEntity<?>> defaultRequestEntityConverter(URI introspectionUri) {
-            return token -> {
-                HttpHeaders headers = requestHeaders();
-                MultiValueMap<String, String> body = requestBody(token);
-                return new RequestEntity<>(body, headers, HttpMethod.POST, introspectionUri);
-            };
-        }
-
-        private HttpHeaders requestHeaders() {
-            HttpHeaders headers = new HttpHeaders();
-            headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON_UTF8));
-            return headers;
-        }
-
-        private MultiValueMap<String, String> requestBody(String token) {
-            MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
-            body.add("token", token);
-            return body;
         }
     }
 
