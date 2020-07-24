@@ -1,8 +1,5 @@
 package io.jzheaux.springsecurity.resolutions;
 
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
 import javax.persistence.CascadeType;
 import javax.persistence.Column;
 import javax.persistence.Entity;
@@ -12,45 +9,114 @@ import javax.persistence.OneToMany;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.UUID;
 
-@Data
-@NoArgsConstructor
-@Entity(name = "users")
+@Entity(name="users")
 public class User implements Serializable {
+	@Id
+	UUID id;
 
-    @Id
-    private UUID id;
-    @Column(name = "username", unique = true)
-    private String username;
-    @Column
-    private String password;
-    @Column
-    private boolean enabled = true;
-    @OneToMany(fetch = FetchType.EAGER, cascade = CascadeType.ALL)
-    private Collection<UserAuthority> userAuthorities = new ArrayList<>();
+	@Column(name="username")
+	String username;
 
-    public User(String username, String password) {
-        this.id = UUID.randomUUID();
-        this.username = username;
-        this.password = password;
-    }
+	@Column
+	String password;
 
-    public User(User user) {
-        this.id = user.id;
-        this.username = user.username;
-        this.password = user.password;
-        this.enabled = user.enabled;
-        this.userAuthorities = user.userAuthorities;
-    }
+	@Column
+	boolean enabled = true;
 
-    public Collection<UserAuthority> getUserAuthorities() {
-        return Collections.unmodifiableCollection(userAuthorities);
-    }
+	@Column(name="full_name")
+	String fullName;
 
-    public void grantAuthority(String authority) {
-        UserAuthority userAuthority = new UserAuthority(authority, this);
-        this.userAuthorities.add(userAuthority);
-    }
+	@Column(name="subscription")
+	String subscription;
+
+	@OneToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+	Collection<User> friends = new ArrayList<>();
+
+	@OneToMany(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+	Collection<UserAuthority> userAuthorities = new ArrayList<>();
+
+	User() {}
+
+	User(String username, String password) {
+		this.id = UUID.randomUUID();
+		this.username = username;
+		this.password = password;
+	}
+
+	User(User user) {
+		this.id = user.id;
+		this.username = user.username;
+		this.password = user.password;
+		this.enabled = user.enabled;
+		this.fullName = user.fullName;
+		this.subscription = user.subscription;
+		this.friends = user.friends;
+		this.userAuthorities = user.userAuthorities;
+	}
+
+	public UUID getId() {
+		return id;
+	}
+
+	public void setId(UUID id) {
+		this.id = id;
+	}
+
+	public String getUsername() {
+		return username;
+	}
+
+	public void setUsername(String username) {
+		this.username = username;
+	}
+
+	public String getPassword() {
+		return password;
+	}
+
+	public void setPassword(String password) {
+		this.password = password;
+	}
+
+	public boolean isEnabled() {
+		return enabled;
+	}
+
+	public void setEnabled(boolean enabled) {
+		this.enabled = enabled;
+	}
+
+	public String getFullName() {
+		return fullName;
+	}
+
+	public void setFullName(String fullName) {
+		this.fullName = fullName;
+	}
+
+	public String getSubscription() {
+		return subscription;
+	}
+
+	public void setSubscription(String subscription) {
+		this.subscription = subscription;
+	}
+
+	public Collection<User> getFriends() {
+		return friends;
+	}
+
+	public void addFriend(User user) {
+		this.friends.add(user);
+	}
+
+	public Collection<UserAuthority> getUserAuthorities() {
+		return userAuthorities;
+	}
+
+	public void grantAuthority(String authority) {
+		this.userAuthorities.add(new UserAuthority(this, authority));
+	}
 }
