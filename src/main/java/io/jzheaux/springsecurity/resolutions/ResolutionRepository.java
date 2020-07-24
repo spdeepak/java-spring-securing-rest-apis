@@ -11,10 +11,10 @@ import java.util.UUID;
 @Repository
 public interface ResolutionRepository extends CrudRepository<Resolution, UUID> {
 	@Modifying
-	@Query("UPDATE Resolution SET text = :text WHERE id = :id AND owner = ?#{authentication.name}")
+	@Query("UPDATE Resolution SET text = :text WHERE id = :id")
 	void revise(UUID id, String text);
 
 	@Modifying
-	@Query("UPDATE Resolution SET completed = 1 WHERE id = :id AND owner = ?#{authentication.name}")
+	@Query("UPDATE Resolution SET completed = 1 WHERE id = :id")
 	void complete(UUID id);
 }
