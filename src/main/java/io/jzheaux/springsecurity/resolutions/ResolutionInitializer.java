@@ -19,6 +19,8 @@ public class ResolutionInitializer implements SmartInitializingSingleton {
         this.resolutions.save(new Resolution("Read War and Peace", "user"));
         this.resolutions.save(new Resolution("Free Solo the Eiffel Tower", "user"));
         this.resolutions.save(new Resolution("Hang Christmas Lights", "user"));
+        this.resolutions.save(new Resolution("Hang Christmas Lights", "hasread"));
+        this.resolutions.save(new Resolution("Hang Christmas Lights", "haswrite"));
 
         User user = new User("user", "{bcrypt}$2y$12$igU7VilJIQu8DUY.XgCJPuisjRCE9maNNnO5CnhrdrQvNv3UNqm.m");
         user.grantAuthority("resolution:read");
