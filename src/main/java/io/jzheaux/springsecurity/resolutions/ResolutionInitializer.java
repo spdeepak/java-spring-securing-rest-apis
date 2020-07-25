@@ -1,15 +1,18 @@
 package io.jzheaux.springsecurity.resolutions;
 
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.stereotype.Component;
 
 @Component
-@RequiredArgsConstructor
 public class ResolutionInitializer implements SmartInitializingSingleton {
 
     private final ResolutionRepository resolutions;
     private final UserRepository userRepository;
+
+    public ResolutionInitializer(ResolutionRepository resolutions, UserRepository userRepository) {
+        this.resolutions = resolutions;
+        this.userRepository = userRepository;
+    }
 
     @Override
     public void afterSingletonsInstantiated() {

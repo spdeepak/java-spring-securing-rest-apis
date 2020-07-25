@@ -1,8 +1,5 @@
 package io.jzheaux.springsecurity.resolutions;
 
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
 import javax.persistence.CascadeType;
 import javax.persistence.Column;
 import javax.persistence.Entity;
@@ -15,8 +12,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.UUID;
 
-@Data
-@NoArgsConstructor
 @Entity(name = "users")
 public class User implements Serializable {
 
@@ -30,6 +25,9 @@ public class User implements Serializable {
     private boolean enabled = true;
     @OneToMany(fetch = FetchType.EAGER, cascade = CascadeType.ALL)
     private Collection<UserAuthority> userAuthorities = new ArrayList<>();
+
+    public User() {
+    }
 
     public User(String username, String password) {
         this.id = UUID.randomUUID();
@@ -49,8 +47,44 @@ public class User implements Serializable {
         return Collections.unmodifiableCollection(userAuthorities);
     }
 
+    public void setUserAuthorities(Collection<UserAuthority> userAuthorities) {
+        this.userAuthorities = userAuthorities;
+    }
+
     public void grantAuthority(String authority) {
         UserAuthority userAuthority = new UserAuthority(authority, this);
         this.userAuthorities.add(userAuthority);
+    }
+
+    public UUID getId() {
+        return id;
+    }
+
+    public void setId(UUID id) {
+        this.id = id;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
     }
 }
