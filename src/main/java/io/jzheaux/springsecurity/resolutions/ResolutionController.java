@@ -18,9 +18,11 @@ import java.util.UUID;
 @RestController
 public class ResolutionController {
     private final ResolutionRepository resolutions;
+    private final UserRepository userRepository;
 
-    public ResolutionController(ResolutionRepository resolutions) {
+    public ResolutionController(ResolutionRepository resolutions, UserRepository userRepository) {
         this.resolutions = resolutions;
+        this.userRepository = userRepository;
     }
 
     @CrossOrigin(allowCredentials = "true")//(maxAge = 0) if locally verifying
@@ -28,7 +30,13 @@ public class ResolutionController {
     @PreAuthorize("hasAuthority('resolution:read')")
     @PostFilter("@post.filter(#root)")
     public Iterable<Resolution> read() {
-        return this.resolutions.findAll();
+        Iterable<Resolution> resolutions = this.resolutions.findAll();
+        resolutions.forEach(resolution -> {
+            String fullName = userRepository.findByUsername(resolution.getOwner())
+                    .map(User::getFullName).orElse("Anonymous");
+            resolution.setText(resolution.getText().concat(", by").concat(fullName));
+        });
+        return resolutions;
     }
 
     @GetMapping("/resolution/{id}")
