@@ -32,6 +32,7 @@ public class ResolutionsApplication extends WebSecurityConfigurerAdapter {
                         .anyRequest().hasAuthority("resolution:write"))
                 .httpBasic(basic -> {
                 })
+                .oauth2ResourceServer(oauth2->oauth2.jwt())
                 .cors(cors -> {
                 });
     }
